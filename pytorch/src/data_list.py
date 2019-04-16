@@ -9,15 +9,15 @@ import torch.utils.data as data
 import os
 import os.path
 
-def make_dataset(image_list, labels):
+def make_dataset(image_list, labels, root=None):
     if labels:
       len_ = len(image_list)
-      images = [(image_list[i].strip(), labels[i, :]) for i in range(len_)]
+      images = [(os.path.join(root,image_list[i].strip()), labels[i, :]) for i in range(len_)]
     else:
       if len(image_list[0].split()) > 2:
-        images = [(val.split()[0], np.array([int(la) for la in val.split()[1:]])) for val in image_list]
+        images = [(os.path.join(root,val.split()[0]), np.array([int(la) for la in val.split()[1:]])) for val in image_list]
       else:
-        images = [(val.split()[0], int(val.split()[1])) for val in image_list]
+        images = [(os.path.join(root,val.split()[0]), int(val.split()[1])) for val in image_list]
     return images
 
 
@@ -66,9 +66,10 @@ class ImageList(object):
         imgs (list): List of (image path, class_index) tuples
     """
 
-    def __init__(self, image_list, labels=None, transform=None, target_transform=None,
+    def __init__(self, image_list,root=None,
+                 labels=None, transform=None, target_transform=None,
                  loader=default_loader):
-        imgs = make_dataset(image_list, labels)
+        imgs = make_dataset(image_list, labels,root=root)
         if len(imgs) == 0:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))

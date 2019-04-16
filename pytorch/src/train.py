@@ -27,12 +27,8 @@ def image_classification_predict(loader, model, test_10crop=True, gpu=True, soft
             labels = data[0][1]
             if gpu:
                 for j in range(10):
-                    inputs[j] = Variable(inputs[j].cuda())
-                labels = Variable(labels.cuda())
-            else:
-                for j in range(10):
-                    inputs[j] = Variable(inputs[j])
-                labels = Variable(labels)
+                    inputs[j] = inputs[j].cuda()
+                labels = labels.cuda()
             outputs = []
             for j in range(9):
                 _, predict_out = model(inputs[j])
@@ -42,29 +38,27 @@ def image_classification_predict(loader, model, test_10crop=True, gpu=True, soft
             softmax_outputs = sum(outputs)
             outputs = outputs_center
             if start_test:
-                all_output = outputs.data.float()
-                all_softmax_output = softmax_outputs.data.cpu().float()
-                all_label = labels.data.float()
+                all_output = outputs.float()
+                all_softmax_output = softmax_outputs.cpu().float()
+                all_label = labels.float()
                 start_test = False
             else:
-                all_output = torch.cat((all_output, outputs.data.float()), 0)
+                all_output = torch.cat((all_output, outputs.float()), 0)
                 all_softmax_output = torch.cat((all_softmax_output, softmax_outputs.data.cpu().float()), 0)
-                all_label = torch.cat((all_label, labels.data.float()), 0)
+                all_label = torch.cat((all_label, labels.float()), 0)
     else:
         iter_val = iter(loader["test"])
         for i in range(len(loader['test'])):
             data = iter_val.next()
             inputs = data[0]
             if gpu:
-                inputs = Variable(inputs.cuda())
-            else:
-                inputs = Variable(inputs)
+                inputs = inputs.cuda()
             _, outputs = model(inputs)
             softmax_outputs = nn.Softmax()(softmax_param * outputs)
             if start_test:
-                all_output = outputs.data.cpu().float()
-                all_softmax_output = softmax_outputs.data.cpu().float()
-                all_label = labels.data.float()
+                all_output = outputs.cpu().float()
+                all_softmax_output = softmax_output.cpu().float()
+                all_label = labels.float()
                 start_test = False
             else:
                 all_output = torch.cat((all_output, outputs.data.cpu().float()), 0)
@@ -83,24 +77,21 @@ def image_classification_test(loader, model, test_10crop=True, gpu=True):
             labels = data[0][1]
             if gpu:
                 for j in range(10):
-                    inputs[j] = Variable(inputs[j].cuda())
-                labels = Variable(labels.cuda())
-            else:
-                for j in range(10):
-                    inputs[j] = Variable(inputs[j])
-                labels = Variable(labels)
+                    inputs[j] = inputs[j].cuda()
+                labels = labels.cuda()
+
             outputs = []
             for j in range(10):
                 _, predict_out = model(inputs[j])
                 outputs.append(nn.Softmax()(predict_out))
             outputs = sum(outputs)
             if start_test:
-                all_output = outputs.data.float()
-                all_label = labels.data.float()
+                all_output = outputs.float()
+                all_label = labels.float()
                 start_test = False
             else:
-                all_output = torch.cat((all_output, outputs.data.float()), 0)
-                all_label = torch.cat((all_label, labels.data.float()), 0)
+                all_output = torch.cat((all_output, outputs.float()), 0)
+                all_label = torch.cat((all_label, labels.float()), 0)
     else:
         iter_test = iter(loader["test"])
         for i in range(len(loader['test'])):
@@ -108,19 +99,16 @@ def image_classification_test(loader, model, test_10crop=True, gpu=True):
             inputs = data[0]
             labels = data[1]
             if gpu:
-                inputs = Variable(inputs.cuda())
-                labels = Variable(labels.cuda())
-            else:
-                inputs = Variable(inputs)
-                labels = Variable(labels)
+                inputs = inputs.cuda()
+                labels = labels.cuda()
             _, outputs = model(inputs)
             if start_test:
-                all_output = outputs.data.float()
-                all_label = labels.data.float()
+                all_output = outputs.float()
+                all_label = labels.float()
                 start_test = False
             else:
                 all_output = torch.cat((all_output, outputs.data.float()), 0)
-                all_label = torch.cat((all_label, labels.data.float()), 0)       
+                all_label = torch.cat((all_label, labels.data.float()), 0)
     _, predict = torch.max(all_output, 1)
     accuracy = torch.sum(torch.squeeze(predict).float() == all_label) / float(all_label.size()[0])
     return accuracy
@@ -130,26 +118,26 @@ def train(config):
     ## set pre-process
     prep_dict = {}
     prep_config = config["prep"]
-    prep_dict["train_set1"] = prep.image_train( \
-                            resize_size=prep_config["resize_size"], \
+    prep_dict["train_set1"] = prep.image_train(
+                            resize_size=prep_config["resize_size"],
                             crop_size=prep_config["crop_size"])
-    prep_dict["train_set2"] = prep.image_train( \
-                            resize_size=prep_config["resize_size"], \
+    prep_dict["train_set2"] = prep.image_train(
+                            resize_size=prep_config["resize_size"],
                             crop_size=prep_config["crop_size"])
 
     ## prepare data
     dsets = {}
     dset_loaders = {}
     data_config = config["data"]
-    dsets["train_set1"] = ImageList(open(data_config["train_set1"]["list_path"]).readlines(), \
-                                transform=prep_dict["train_set1"])
-    dset_loaders["train_set1"] = util_data.DataLoader(dsets["train_set1"], \
-            batch_size=data_config["train_set1"]["batch_size"], \
+    dsets["train_set1"] = ImageList(open(data_config["train_set1"]["list_path"]).readlines(),
+                                transform=prep_dict["train_set1"], root=config["root"] )
+    dset_loaders["train_set1"] = util_data.DataLoader(dsets["train_set1"],
+            batch_size=data_config["train_set1"]["batch_size"],
             shuffle=True, num_workers=4)
-    dsets["train_set2"] = ImageList(open(data_config["train_set2"]["list_path"]).readlines(), \
-                                transform=prep_dict["train_set2"])
-    dset_loaders["train_set2"] = util_data.DataLoader(dsets["train_set2"], \
-            batch_size=data_config["train_set2"]["batch_size"], \
+    dsets["train_set2"] = ImageList(open(data_config["train_set2"]["list_path"]).readlines(),
+                                transform=prep_dict["train_set2"], root=config["root"] )
+    dset_loaders["train_set2"] = util_data.DataLoader(dsets["train_set2"],
+            batch_size=data_config["train_set2"]["batch_size"],
             shuffle=True, num_workers=4)
 
     hash_bit = config["hash_bit"]
@@ -197,27 +185,24 @@ def train(config):
             iter2 = iter(dset_loaders["train_set2"])
         inputs1, labels1 = iter1.next()
         inputs2, labels2 = iter2.next()
+
         if use_gpu:
             inputs1, inputs2, labels1, labels2 = \
-                Variable(inputs1).cuda(), Variable(inputs2).cuda(), \
-                Variable(labels1).cuda(), Variable(labels2).cuda()
-        else:
-            inputs1, inputs2, labels1, labels2 = Variable(inputs1), \
-                Variable(inputs2), Variable(labels1), Variable(labels2)
+                inputs1.cuda(), inputs2.cuda(), \
+                labels1.cuda(), labels2.cuda()
            
         inputs = torch.cat((inputs1, inputs2), dim=0)
         outputs = base_network(inputs)
-        similarity_loss = loss.pairwise_loss(outputs.narrow(0,0,inputs1.size(0)), \
-                                 outputs.narrow(0,inputs1.size(0),inputs2.size(0)), \
-                                 labels1, labels2, \
-                                 sigmoid_param=config["loss"]["sigmoid_param"], \
-                                 l_threshold=config["loss"]["l_threshold"], \
+        similarity_loss = loss.pairwise_loss(outputs.narrow(0,0,inputs1.size(0)),
+                                 outputs.narrow(0,inputs1.size(0),inputs2.size(0)),
+                                 labels1, labels2,
+                                 sigmoid_param=config["loss"]["sigmoid_param"],
+                                 l_threshold=config["loss"]["l_threshold"],
                                  class_num=config["loss"]["class_num"])
 
         similarity_loss.backward()
-        print("Iter: {:05d}, loss: {:.3f}".format(i, similarity_loss.float().data[0]))
-        config["out_file"].write("Iter: {:05d}, loss: {:.3f}".format(i, \
-            similarity_loss.float().data[0]))
+        print("Iter: {:05d}, loss: {:.3f}".format(i, float(similarity_loss)))
+        config["out_file"].write("Iter: {:05d}, loss: {:.3f}".format(i, float(similarity_loss)))
         optimizer.step()
 
 if __name__ == "__main__":
@@ -264,12 +249,15 @@ if __name__ == "__main__":
     config["loss"] = {"l_weight":1.0, "q_weight":0, "l_threshold":15.0, "sigmoid_param":10./config["hash_bit"], "class_num":args.class_num}
 
     if config["dataset"] == "imagenet":
+        config["root"] = "../data/imagenet"
         config["data"] = {"train_set1":{"list_path":"../data/imagenet/train.txt", "batch_size":36}, \
                           "train_set2":{"list_path":"../data/imagenet/train.txt", "batch_size":36}}
     elif config["dataset"] == "nus_wide":
+        config["root"] = "../data/nus_wide"
         config["data"] = {"train_set1":{"list_path":"../data/nus_wide/train.txt", "batch_size":36}, \
                           "train_set2":{"list_path":"../data/nus_wide/train.txt", "batch_size":36}}
     elif config["dataset"] == "coco":
+        config["root"] = "../data/coco"
         config["data"] = {"train_set1":{"list_path":"../data/coco/train.txt", "batch_size":36}, \
                           "train_set2":{"list_path":"../data/coco/train.txt", "batch_size":36}}
     print(config["loss"])
