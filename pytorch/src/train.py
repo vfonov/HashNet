@@ -13,7 +13,10 @@ import torch.utils.data as util_data
 import lr_schedule
 import data_list
 from data_list import ImageList
-from torch.autograd import Variable
+
+from tensorboardX import SummaryWriter
+
+writer = SummaryWriter()
 
 optim_dict = {"SGD": optim.SGD}
 
@@ -21,7 +24,8 @@ def image_classification_predict(loader, model, test_10crop=True, gpu=True, soft
     start_test = True
     if test_10crop:
         iter_test = [iter(loader['test'+str(i)]) for i in range(10)]
-        for i in range(len(loader['test0'])):
+
+        for _ in range(len(loader['test0'])):
             data = [iter_test[j].next() for j in range(10)]
             inputs = [data[j][0] for j in range(10)]
             labels = data[0][1]
@@ -71,7 +75,7 @@ def image_classification_test(loader, model, test_10crop=True, gpu=True):
     start_test = True
     if test_10crop:
         iter_test = [iter(loader['test'+str(i)]) for i in range(10)]
-        for i in range(len(loader['test0'])):
+        for _ in range(len(loader['test0'])):
             data = [iter_test[j].next() for j in range(10)]
             inputs = [data[j][0] for j in range(10)]
             labels = data[0][1]
@@ -164,12 +168,10 @@ def train(config):
     schedule_param = optimizer_config["lr_param"]
     lr_scheduler = lr_schedule.schedule_dict[optimizer_config["lr_type"]]
 
-
     ## train   
     len_train1 = len(dset_loaders["train_set1"]) - 1
     len_train2 = len(dset_loaders["train_set2"]) - 1
-    transfer_loss_value = classifier_loss_value = total_loss_value = 0.0
-    best_acc = 0.0
+    
     for i in range(config["num_iterations"]):
         if i % config["snapshot_interval"] == 0:
             torch.save(nn.Sequential(base_network), osp.join(config["output_path"], \
@@ -179,17 +181,18 @@ def train(config):
         base_network.train(True)
         optimizer = lr_scheduler(param_lr, optimizer, i, **schedule_param)
         optimizer.zero_grad()
+
         if i % len_train1 == 0:
             iter1 = iter(dset_loaders["train_set1"])
         if i % len_train2 == 0:
             iter2 = iter(dset_loaders["train_set2"])
+        
         inputs1, labels1 = iter1.next()
         inputs2, labels2 = iter2.next()
 
         if use_gpu:
             inputs1, inputs2, labels1, labels2 = \
-                inputs1.cuda(), inputs2.cuda(), \
-                labels1.cuda(), labels2.cuda()
+                inputs1.cuda(), inputs2.cuda(), labels1.cuda(), labels2.cuda()
            
         inputs = torch.cat((inputs1, inputs2), dim=0)
         outputs = base_network(inputs)
@@ -201,13 +204,16 @@ def train(config):
                                  class_num=config["loss"]["class_num"])
 
         similarity_loss.backward()
+
+        writer.add_scalars('train', {'loss':similarity_loss}, i)
+
         print("Iter: {:05d}, loss: {:.3f}".format(i, float(similarity_loss)))
         config["out_file"].write("Iter: {:05d}, loss: {:.3f}".format(i, float(similarity_loss)))
         optimizer.step()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='HashNet')
-    parser.add_argument('--gpu_id', type=str, default='0', help="device id to run")
+    parser.add_argument('--gpu_id', type=int, default=None, help="device id to run")
     parser.add_argument('--dataset', type=str, default='coco', help="dataset name")
     parser.add_argument('--hash_bit', type=int, default=48, help="number of hash code bits")
     parser.add_argument('--net', type=str, default='ResNet50', help="base network type")
@@ -215,7 +221,12 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, help="learning rate")
     parser.add_argument('--class_num', type=float, help="positive negative pairs balance weight")
     args = parser.parse_args()
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id 
+
+    if args.gpu_id is not None:
+        #os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id 
+        torch.cuda.device(args.gpu_id).__enter__()
+        import torch.backends.cudnn as cudnn
+        cudnn.benchmark = True
 
     # train config  
     config = {}
@@ -250,15 +261,15 @@ if __name__ == "__main__":
 
     if config["dataset"] == "imagenet":
         config["root"] = "../data/imagenet"
-        config["data"] = {"train_set1":{"list_path":"../data/imagenet/train.txt", "batch_size":36}, \
+        config["data"] = {"train_set1":{"list_path":"../data/imagenet/train.txt", "batch_size":36}, 
                           "train_set2":{"list_path":"../data/imagenet/train.txt", "batch_size":36}}
     elif config["dataset"] == "nus_wide":
         config["root"] = "../data/nus_wide"
-        config["data"] = {"train_set1":{"list_path":"../data/nus_wide/train.txt", "batch_size":36}, \
+        config["data"] = {"train_set1":{"list_path":"../data/nus_wide/train.txt", "batch_size":36}, 
                           "train_set2":{"list_path":"../data/nus_wide/train.txt", "batch_size":36}}
     elif config["dataset"] == "coco":
         config["root"] = "../data/coco"
-        config["data"] = {"train_set1":{"list_path":"../data/coco/train.txt", "batch_size":36}, \
+        config["data"] = {"train_set1":{"list_path":"../data/coco/train.txt", "batch_size":36}, 
                           "train_set2":{"list_path":"../data/coco/train.txt", "batch_size":36}}
     print(config["loss"])
     train(config)
