@@ -15,7 +15,7 @@ import torch.utils.data as util_data
 import lr_schedule
 import data_list
 from data_list import ImageList
-from torch.autograd import Variable
+#from torch.autograd import Variable
 
 def save_code_and_label(params, path):
     database_code = params['database_code']
@@ -62,16 +62,14 @@ def code_predict(loader, model, name, test_10crop=True, gpu=True):
             labels = data[0][1]
             if gpu:
                 for j in range(10):
-                    inputs[j] = Variable(inputs[j].cuda())
-            else:
-                for j in range(10):
-                    inputs[j] = Variable(inputs[j])
+                    inputs[j] = inputs[j].cuda()
             outputs = []
             for j in range(10):
-                outputs.append(model(inputs[j]))
+                with torch.no_grad():
+                    outputs.append(model(inputs[j]))
             outputs = sum(outputs) / 10.0
             if start_test:
-                all_output = outputs.data.float()
+                all_output = outputs.float()
                 all_label = labels.float()
                 start_test = False
             else:
@@ -84,12 +82,10 @@ def code_predict(loader, model, name, test_10crop=True, gpu=True):
             inputs = data[0]
             labels = data[1]
             if gpu:
-                inputs = Variable(inputs.cuda())
-            else:
-                inputs = Variable(inputs)
+                inputs = inputs.cuda()
             outputs = model(inputs)
             if start_test:
-                all_output = outputs.data.cpu().float()
+                all_output = outputs.cpu().float()
                 all_label = labels.float()
                 start_test = False
             else:
@@ -102,18 +98,18 @@ def predict(config):
     prep_dict = {}
     prep_config = config["prep"]
     if prep_config["test_10crop"]:
-        prep_dict["database"] = prep.image_test_10crop( \
-                            resize_size=prep_config["resize_size"], \
+        prep_dict["database"] = prep.image_test_10crop( 
+                            resize_size=prep_config["resize_size"], 
                             crop_size=prep_config["crop_size"])
-        prep_dict["test"] = prep.image_test_10crop( \
-                            resize_size=prep_config["resize_size"], \
+        prep_dict["test"] = prep.image_test_10crop( 
+                            resize_size=prep_config["resize_size"], 
                             crop_size=prep_config["crop_size"])
     else:
-        prep_dict["database"] = prep.image_test( \
-                            resize_size=prep_config["resize_size"], \
+        prep_dict["database"] = prep.image_test( 
+                            resize_size=prep_config["resize_size"], 
                             crop_size=prep_config["crop_size"])
-        prep_dict["test"] = prep.image_test( \
-                            resize_size=prep_config["resize_size"], \
+        prep_dict["test"] = prep.image_test( 
+                            resize_size=prep_config["resize_size"], 
                             crop_size=prep_config["crop_size"])
                
     ## prepare data
@@ -122,27 +118,27 @@ def predict(config):
     data_config = config["data"]
     if prep_config["test_10crop"]:
         for i in range(10):
-            dsets["database"+str(i)] = ImageList(open(data_config["database"]["list_path"]).readlines(), \
-                                transform=prep_dict["database"]["val"+str(i)])
-            dset_loaders["database"+str(i)] = util_data.DataLoader(dsets["database"+str(i)], \
-                                batch_size=data_config["database"]["batch_size"], \
+            dsets["database"+str(i)] = ImageList(open(data_config["database"]["list_path"]).readlines(), 
+                                 transform=prep_dict["database"]["val"+str(i)], root=config["root"])
+            dset_loaders["database"+str(i)] = util_data.DataLoader(dsets["database"+str(i)], 
+                                batch_size=data_config["database"]["batch_size"], 
                                 shuffle=False, num_workers=4)
-            dsets["test"+str(i)] = ImageList(open(data_config["test"]["list_path"]).readlines(), \
-                                transform=prep_dict["test"]["val"+str(i)])
-            dset_loaders["test"+str(i)] = util_data.DataLoader(dsets["test"+str(i)], \
-                                batch_size=data_config["test"]["batch_size"], \
+            dsets["test"+str(i)] = ImageList(open(data_config["test"]["list_path"]).readlines(), 
+                                transform=prep_dict["test"]["val"+str(i)], root=config["root"])
+            dset_loaders["test"+str(i)] = util_data.DataLoader(dsets["test"+str(i)], 
+                                batch_size=data_config["test"]["batch_size"], 
                                 shuffle=False, num_workers=4)
 
     else:
-        dsets["database"] = ImageList(open(data_config["database"]["list_path"]).readlines(), \
-                                transform=prep_dict["database"])
-        dset_loaders["database"] = util_data.DataLoader(dsets["database"], \
-                                batch_size=data_config["database"]["batch_size"], \
+        dsets["database"] = ImageList(open(data_config["database"]["list_path"]).readlines(), 
+                                transform=prep_dict["database"], root=config["root"])
+        dset_loaders["database"] = util_data.DataLoader(dsets["database"], 
+                                batch_size=data_config["database"]["batch_size"], 
                                 shuffle=False, num_workers=4)
-        dsets["test"] = ImageList(open(data_config["test"]["list_path"]).readlines(), \
-                                transform=prep_dict["test"])
-        dset_loaders["test"] = util_data.DataLoader(dsets["test"], \
-                                batch_size=data_config["test"]["batch_size"], \
+        dsets["test"] = ImageList(open(data_config["test"]["list_path"]).readlines(), 
+                                transform=prep_dict["test"], root=config["root"])
+        dset_loaders["test"] = util_data.DataLoader(dsets["test"], 
+                                batch_size=data_config["test"]["batch_size"], 
                                 shuffle=False, num_workers=4)
     ## set base network
     base_network = torch.load(config["snapshot_path"])
@@ -154,8 +150,8 @@ def predict(config):
     database_codes, database_labels = code_predict(dset_loaders, base_network, "database", test_10crop=prep_config["test_10crop"], gpu=use_gpu)
     test_codes, test_labels = code_predict(dset_loaders, base_network, "test", test_10crop=prep_config["test_10crop"], gpu=use_gpu)
 
-    return {"database_code":database_codes.numpy(), "database_labels":database_labels.numpy(), \
-            "test_code":test_codes.numpy(), "test_labels":test_labels.numpy()}
+    return {"database_code":database_codes.detach().numpy(), "database_labels":database_labels.detach().numpy(), 
+            "test_code":test_codes.detach().numpy(), "test_labels":test_labels.detach().numpy()}
 
 
 if __name__ == "__main__":
@@ -177,15 +173,18 @@ if __name__ == "__main__":
 
     config["prep"] = {"test_10crop":False, "resize_size":256, "crop_size":224}
     if config["dataset"] == "imagenet":
-        config["data"] = {"database":{"list_path":"../data/imagenet/database.txt", "batch_size":16}, \
+        config["root"] = "../data/imagenet"
+        config["data"] = {"database":{"list_path":"../data/imagenet/database.txt", "batch_size":16}, 
                           "test":{"list_path":"../data/imagenet/test.txt", "batch_size":16}}
         config["R"] = 1000
     elif config["dataset"] == "nus_wide":
-        config["data"] = {"database":{"list_path":"../data/nus_wide/database.txt", "batch_size":16}, \
+        config["root"] = "../data/nus_wide"
+        config["data"] = {"database":{"list_path":"../data/nus_wide/database.txt", "batch_size":16}, 
                           "test":{"list_path":"../data/nus_wide/test.txt", "batch_size":16}}
         config["R"] = 5000
     elif config["dataset"] == "coco":
-        config["data"] = {"database":{"list_path":"../data/coco/database.txt", "batch_size":16}, \
+        config["root"] = "../data/coco"
+        config["data"] = {"database":{"list_path":"../data/coco/database.txt", "batch_size":16}, 
                           "test":{"list_path":"../data/coco/test.txt", "batch_size":16}}
         config["R"] = 5000
     code_and_label = predict(config)
